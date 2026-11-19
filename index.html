@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>QShots Growth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+/* Layout: one centred column; status bar, controls, KPI row, insights widget, chart grid, table, notes */
+:root {
+  --bg: #f4f6f5; --panel: #ffffff; --fg: #16201d; --muted: #5a6763; --line: #dfe5e2;
+  --accent: #0f766e; --accent-2: #c2780a; --ok: #15803d; --bad: #b42318; --warn: #a15c07;
+  --grid: #e9eeec; --axis: #b9c3bf; --ok-bg: #e7f5ec; --bad-bg: #fdecea; --warn-bg: #fdf3e2;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --radius: 10px; --gap: 16px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1513; --panel: #151e1b; --fg: #e6eeeb; --muted: #97a6a1; --line: #24312d;
+  --accent: #2dd4bf; --accent-2: #f5b544; --ok: #4ade80; --bad: #f87171; --warn: #fbbf24;
+  --grid: #1f2a27; --axis: #3a4a45; --ok-bg: #11291c; --bad-bg: #2e1513; --warn-bg: #2c2210;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e1513; --panel: #151e1b; --fg: #e6eeeb; --muted: #97a6a1; --line: #24312d;
+  --accent: #2dd4bf; --accent-2: #f5b544; --ok: #4ade80; --bad: #f87171; --warn: #fbbf24;
+  --grid: #1f2a27; --axis: #3a4a45; --ok-bg: #11291c; --bad-bg: #2e1513; --warn-bg: #2c2210;
+  color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1240px; margin-inline: auto; padding-block: 28px 56px; display: grid; gap: 28px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(28px, 4vw, 40px); letter-spacing: -.01em; }
+h2 { font-size: 18px; font-weight: 600; }
+h3 { font-size: 15px; font-weight: 600; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.num { font-variant-numeric: tabular-nums; }
+.head { display: grid; gap: 10px; }
+.take { margin: 0; max-width: 74ch; color: var(--muted); }
+.take b { color: var(--fg); font-weight: 600; }
+.status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 13px; color: var(--muted); }
+.live { display: inline-flex; align-items: center; gap: 6px; }
+.live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.live[data-state="loading"]::before { background: var(--warn); }
+.live[data-state="error"]::before { background: var(--bad); }
+.btn { appearance: none; font: inherit; font-size: 13px; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.btn:hover { border-color: var(--axis); }
+a { color: var(--accent); }
+.banner { border: 1px solid var(--bad); background: var(--bad-bg); color: var(--fg); border-radius: var(--radius); padding: 12px 16px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.group { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px; background: var(--panel); }
+.seg button { appearance: none; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+button:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+select { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 18px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.kpi-label { font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.kpi-value { font-family: var(--font-display); font-size: 34px; line-height: 1.1; font-variant-numeric: tabular-nums; min-height: 1.1em; }
+.kpi-line { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chg { font-weight: 600; }
+.chg[data-trend="up"] { color: var(--ok); }
+.chg[data-trend="down"] { color: var(--bad); }
+.kpi-period { font-size: 12px; color: var(--muted); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: var(--gap); }
+.wide { grid-column: 1 / -1; }
+.sub { margin: 0; font-size: 13px; color: var(--muted); }
+.chart { position: relative; min-height: 200px; }
+.chart.tall { min-height: 240px; }
+.chart svg { display: block; overflow: visible; }
+.tick { fill: var(--muted); font-size: 12px; font-family: var(--font-body); }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.12); padding: 6px 10px; font-size: 12px; white-space: nowrap; z-index: 2; font-variant-numeric: tabular-nums; }
+.tip .d { color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.empty { display: flex; align-items: center; justify-content: center; min-height: inherit; color: var(--muted); font-size: 13px; }
+.skeleton { color: transparent !important; background: linear-gradient(90deg, var(--grid), var(--line), var(--grid)); background-size: 200% 100%; border-radius: 6px; }
+@media (prefers-reduced-motion: no-preference) { .skeleton { animation: shimmer 1.4s linear infinite; } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.funnel { display: grid; gap: 8px; }
+.step { display: grid; grid-template-columns: minmax(96px, 130px) 1fr; gap: 10px; align-items: center; }
+.step-name { font-size: 13px; color: var(--muted); }
+.track { display: grid; gap: 3px; min-width: 0; }
+.bar { height: 22px; border-radius: 4px; min-width: 3px; background: var(--accent); transition: width .4s ease-out; }
+.bar.drop { background: var(--bad); }
+.step-text { font-size: 13px; font-variant-numeric: tabular-nums; }
+.flag { display: inline-block; margin-left: 6px; padding: 0 8px; border-radius: 999px; font-size: 12px; color: var(--bad); border: 1px solid currentColor; }
+/* insights widget */
+.insights { border-color: var(--accent); }
+.ins-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); }
+.tabs button { appearance: none; border: 0; background: transparent; font: inherit; font-size: 14px; color: var(--muted); padding: 8px 12px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); font-weight: 500; }
+.signals { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.signal { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.signal:last-child { border-bottom: 0; }
+.pill { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.pill[data-s="good"] { color: var(--ok); background: var(--ok-bg); }
+.pill[data-s="watch"] { color: var(--warn); background: var(--warn-bg); }
+.pill[data-s="bad"] { color: var(--bad); background: var(--bad-bg); }
+.signal p { margin: 2px 0 0; font-size: 14px; color: var(--muted); }
+.signal p b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.acts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.act { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.act-k { font-size: 12px; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; }
+.act dl { margin: 0; display: grid; gap: 6px; }
+.act dt { font-size: 12px; color: var(--muted); }
+.act dd { margin: 0; font-size: 14px; line-height: 1.55; }
+.act dd b { font-variant-numeric: tabular-nums; }
+.track-line { font-size: 13px; padding: 8px 10px; border-radius: 8px; background: var(--bg); }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font-weight: 500; color: var(--muted); }
+.notes { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--muted); font-size: 13px; max-width: 92ch; }
+@media (max-width: 560px) { .kpi-value { font-size: 28px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="head">
+    <h1>QShots growth</h1>
+    <div class="status">
+      <span class="live" id="live" data-state="loading">Loading from Google Sheet…</span>
+      <button class="btn" id="refresh" type="button">Refresh now</button>
+      <a id="sheet-link" href="#" target="_blank" rel="noopener">Open the sheet</a>
+    </div>
+    <p class="take" id="takeaway"></p>
+    <div class="banner" id="banner" hidden></div>
+  </header>
+
+  <div class="controls">
+    <div class="group"><span id="lbl-grain">Compare</span>
+      <div class="seg" role="group" aria-labelledby="lbl-grain">
+        <button type="button" id="g-day" data-grain="day" aria-pressed="false">Day</button>
+        <button type="button" id="g-week" data-grain="week" aria-pressed="true">Week</button>
+        <button type="button" id="g-month" data-grain="month" aria-pressed="false">Month</button>
+      </div>
+    </div>
+    <div class="group"><span id="lbl-mode">Charts show</span>
+      <div class="seg" role="group" aria-labelledby="lbl-mode">
+        <button type="button" id="m-value" data-mode="value" aria-pressed="true">Values</button>
+        <button type="button" id="m-change" data-mode="change" aria-pressed="false">Change vs prior</button>
+      </div>
+    </div>
+    <div class="group"><label for="range">Range</label>
+      <select id="range"><option value="3m">Last 3 months</option><option value="12m" selected>Last 12 months</option><option value="all">All time</option></select>
+    </div>
+  </div>
+
+  <section class="kpis" aria-label="Headline figures">
+    <div class="kpi"><div class="kpi-label">Subscribers</div><div class="kpi-value skeleton" data-k="subscribers.value">—</div>
+      <div class="kpi-line"><span class="chg" data-k="subscribers.change">—</span> new · prior <span data-k="subscribers.prev">—</span></div><div class="kpi-period" data-p="subscribers"></div></div>
+    <div class="kpi"><div class="kpi-label">Emails sent</div><div class="kpi-value skeleton" data-k="sent.value">—</div>
+      <div class="kpi-line"><span class="chg" data-k="sent.change">—</span> <span data-vs></span></div><div class="kpi-period" data-p="sent"></div></div>
+    <div class="kpi"><div class="kpi-label">Emails opened</div><div class="kpi-value skeleton" data-k="opened.value">—</div>
+      <div class="kpi-line"><span class="chg" data-k="opened.change">—</span> <span data-vs></span> · open rate <span data-k="open_rate.value">—</span></div><div class="kpi-period" data-p="opened"></div></div>
+    <div class="kpi"><div class="kpi-label">Quiz start rate</div><div class="kpi-value skeleton" data-k="start_rate.value">—</div>
+      <div class="kpi-line"><span class="chg" data-k="start_rate.change">—</span> <span data-vs></span></div><div class="kpi-period" data-p="start_rate"></div></div>
+    <div class="kpi"><div class="kpi-label">Quiz completion rate</div><div class="kpi-value skeleton" data-k="completion_rate.value">—</div>
+      <div class="kpi-line"><span class="chg" data-k="completion_rate.change">—</span> <span data-vs></span></div><div class="kpi-period" data-p="completion_rate"></div></div>
+  </section>
+
+  <section class="card insights" id="insights">
+    <div class="ins-head">
+      <h2>Insights &amp; actions</h2>
+      <span class="small muted" id="ins-asof"></span>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Insights">
+      <button type="button" role="tab" id="tab-signals" aria-controls="pane-signals" aria-selected="true">Signals</button>
+      <button type="button" role="tab" id="tab-actions" aria-controls="pane-actions" aria-selected="false">Actions</button>
+      <button type="button" role="tab" id="tab-checks" aria-controls="pane-checks" aria-selected="false">Data checks</button>
+    </div>
+    <div role="tabpanel" id="pane-signals" aria-labelledby="tab-signals">
+      <p class="sub">Recalculated from the sheet every time the page loads. Use these for the weekly or monthly check-in.</p>
+      <ul class="signals" id="signals"></ul>
+    </div>
+    <div role="tabpanel" id="pane-actions" aria-labelledby="tab-actions" hidden>
+      <div class="acts">
+        <article class="act">
+          <div class="act-k">Action 1</div>
+          <h3>Add a "challenge a friend" referral to the finish screen</h3>
+          <dl>
+            <dt>Why</dt><dd>Nearly everyone who starts finishes (<b data-f="completion_rate_last90">—</b>), so the finish screen is seen about <b data-f="starts_per_send_last90">—</b> times per send by your most engaged players. Today it asks them for nothing.</dd>
+            <dt>What</dt><dd>Show the score with a one-tap share link that subscribes the friend. Reward both people with something they can redeem. Feedback keeps asking how to use MuCoins and raffle tickets, so make redemption obvious first.</dd>
+            <dt>Follow-on effect</dt><dd>Friends of active players open more than bulk sign-ups, so open rate and quiz starts rise along with the list.</dd>
+          </dl>
+          <div class="track-line">Track: new subscribers a week, now <b data-f="recent_per_week">—</b> against a target of <b data-f="weekly_target">—</b>.</div>
+        </article>
+        <article class="act">
+          <div class="act-k">Action 2</div>
+          <h3>Turn one-off bursts into a monthly calendar, with onboarding</h3>
+          <dl>
+            <dt>Why</dt><dd>Bursts of 100+ in a week bring <b data-f="spike_share">—</b> of logged growth, but those cohorts rarely open: opens per send are <b data-f="opens_per_send_last90">—</b> now vs <b data-f="opens_per_send_prev">—</b> a year earlier, while emails per send went from <b data-f="sent_per_send_prev">—</b> to <b data-f="sent_per_send_last90">—</b>.</dd>
+            <dt>What</dt><dd>Run one acquisition event a month (QQL Club monthly quiz, Safety Quest, special-day quizzes, college tie-ups, the family quiz community). Ask for QShots opt-in at registration, then send a 3-email welcome: what QShots is, how points and raffles work, an easy first quiz. Track each cohort's open rate after 30 days.</dd>
+            <dt>Follow-on effect</dt><dd>People who join through an event they chose, and get a proper welcome, open the daily email, so opens and starts grow with the list.</dd>
+          </dl>
+          <div class="track-line">Track: opens per send. It should climb after each event, not stay flat.</div>
+        </article>
+        <article class="act">
+          <div class="act-k">Action 3</div>
+          <h3>Win back or retire inactive subscribers</h3>
+          <dl>
+            <dt>Why</dt><dd>About <b data-f="non_openers_per_send">—</b> recipients of each send don't open it. Low engagement pushes mail into Promotions or spam, which hides it from people who want it. The subscriber log is also <b data-f="not_emailed">—</b> higher than the latest send list.</dd>
+            <dt>What</dt><dd>Find subscribers with no open in 90 days. Send a 2-email win-back with tested subject lines (custom subject lines are already live). Pause daily sends to anyone who doesn't respond, and reconcile the log with the send list.</dd>
+            <dt>Follow-on effect</dt><dd>Open rate rises right away, better inbox placement lifts opens and starts, and the subscriber count becomes a true measure of growth.</dd>
+          </dl>
+          <div class="track-line">Track: open rate over the last 4 weeks, now <b data-f="open_rate_4w">—</b>.</div>
+        </article>
+      </div>
+    </div>
+    <div role="tabpanel" id="pane-checks" aria-labelledby="tab-checks" hidden>
+      <p class="sub">Things in the sheet that make the numbers less reliable. Fix them at the source and the page picks it up on the next refresh.</p>
+      <ul class="signals" id="checks"></ul>
+    </div>
+  </section>
+
+  <section class="card" id="funnel">
+    <h3>Where readers drop off</h3>
+    <p class="sub" id="funnel-note">Each step as a share of the step before it, for the latest full period.</p>
+    <div class="funnel">
+      <div class="step"><div class="step-name">Emails sent</div><div class="track"><div class="bar" data-step="sent"></div><div class="step-text"><b data-fn="sent">—</b></div></div></div>
+      <div class="step"><div class="step-name">Opened</div><div class="track"><div class="bar drop" data-step="opened"></div><div class="step-text"><b data-fn="opened">—</b> · <span data-fn="open_rate">—</span> of sent<span class="flag">Biggest drop</span></div></div></div>
+      <div class="step"><div class="step-name">Started quiz</div><div class="track"><div class="bar" data-step="started"></div><div class="step-text"><b data-fn="started">—</b> · <span data-fn="start_rate">—</span> of opened</div></div></div>
+      <div class="step"><div class="step-name">Finished quiz</div><div class="track"><div class="bar" data-step="completed"></div><div class="step-text"><b data-fn="completed">—</b> · <span data-fn="completion_rate">—</span> of started</div></div></div>
+    </div>
+  </section>
+
+  <section style="display:grid;gap:12px" id="trends">
+    <h2 id="trends-title">Trends</h2>
+    <div class="grid">
+      <article class="card wide"><h3>Subscriber growth</h3><p class="sub" data-note="subscribers"></p><div class="chart tall" data-chart="subscribers"></div><div class="legend" id="legend-subs"></div></article>
+      <article class="card"><h3>Emails sent</h3><p class="sub" data-note="sent"></p><div class="chart" data-chart="sent"></div></article>
+      <article class="card"><h3>Emails opened</h3><p class="sub" data-note="opened"></p><div class="chart" data-chart="opened"></div></article>
+      <article class="card"><h3>Open rate</h3><p class="sub" data-note="open_rate"></p><div class="chart" data-chart="open_rate"></div></article>
+      <article class="card"><h3>Quiz start rate</h3><p class="sub" data-note="start_rate"></p><div class="chart" data-chart="start_rate"></div></article>
+      <article class="card wide"><h3>Quiz completion rate</h3><p class="sub" data-note="completion_rate"></p><div class="chart" data-chart="completion_rate"></div></article>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Morning vs evening send</h3>
+    <p class="sub">Last 12 months of data.</p>
+    <div class="table-wrap"><table id="slot-table"><thead><tr><th>Send</th><th>Sends</th><th>Emails sent</th><th>Opened</th><th>Open rate</th><th>Quiz start rate</th><th>Completion rate</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section style="display:grid;gap:10px">
+    <h2>About the data</h2>
+    <ul class="notes">
+      <li>Read live from the Google Sheet tabs "QShots Engagement" (one row per send, two a day) and "Subscriber Count" (a log taken about weekly). The page reloads the data every few minutes while it is open.</li>
+      <li>Quiz start rate is quiz starts ÷ emails opened. Completion rate is completions ÷ starts. Weeks start on Monday. Rows with no numbers yet are skipped.</li>
+      <li>Day-level subscriber values are estimated on a straight line between logs. Where the log skips more than 5 weeks, the chart leaves a gap instead of guessing.</li>
+      <li>The latest week and month are usually partial and shown faded. Headline figures compare the latest full period with the one before.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+/* ---------- Settings: change these if the sheet changes ---------- */
+const CONFIG = {
+  sheetId: '1S1zVbjNEFxNfhJK0NZCUm4FUUk3EasMXeHo3Vv6mxvM',
+  engagementTab: 'QShots Engagement',
+  subscriberTab: 'Subscriber Count',
+  refreshMinutes: 5,
+  weeklyNewTarget: 25,      // goal for new subscribers per week (Action 1)
+  missingLogDays: 35,       // a gap longer than this between subscriber logs counts as missing data
+};
+
+(() => {
+  const DAY = 864e5;
+  const fInt = d3.format(',');
+  const fPct = d3.format('.1%');
+  const sign = (v, s) => (v > 0 ? '+' : v < 0 ? '-' : '') + s;
+  const fSignedInt = (v) => sign(v, fInt(Math.abs(v)));
+  const fSignedPct = (v) => sign(v, fPct(Math.abs(v)));
+  const fPts = (v) => sign(v, Math.abs(v).toFixed(1)) + ' pts';
+  const fCompact = (v) => (Math.abs(v) >= 1000 ? d3.format('~s')(v) : fInt(v));
+  const fDate = d3.utcFormat('%b %-d, %Y');
+  const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const parseIso = (s) => new Date(s + 'T00:00:00Z');
+  const r4 = (x) => Math.round(x * 10000) / 10000;
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => [...document.querySelectorAll(s)];
+
+  const state = { grain: 'week', mode: 'value', range: '12m', data: null };
+  try { const s = JSON.parse(localStorage.getItem('qs-view') || '{}'); Object.assign(state, { grain: s.grain || 'week', mode: s.mode || 'value', range: s.range || '12m' }); } catch (e) {}
+  const saveView = () => { try { localStorage.setItem('qs-view', JSON.stringify({ grain: state.grain, mode: state.mode, range: state.range })); } catch (e) {} };
+
+  $('#sheet-link').href = `https://docs.google.com/spreadsheets/d/${CONFIG.sheetId}/edit`;
+
+  /* ---------- Loading ---------- */
+  const gviz = (tab, tq) => `https://docs.google.com/spreadsheets/d/${CONFIG.sheetId}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(tab)}${tq ? '&tq=' + encodeURIComponent(tq) : ''}&_=${Date.now()}`;
+  function parseCSV(text) {
+    const rows = []; let row = [], f = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+      else if (c === '"') q = true;
+      else if (c === ',') { row.push(f); f = ''; }
+      else if (c === '\n') { row.push(f); rows.push(row); row = []; f = ''; }
+      else if (c !== '\r') f += c;
+    }
+    if (f !== '' || row.length) { row.push(f); rows.push(row); }
+    return rows;
+  }
+  const num = (s) => { const t = String(s ?? '').replace(/[,\s]/g, ''); return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : null; };
+  const parseDate = (s) => {
+    const m = /^\s*(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})(?:\s+(\d{1,2}):(\d{2}))?/.exec(String(s || ''));
+    if (!m) return null;
+    return { d: Date.UTC(+m[3], +m[2] - 1, +m[1]), hour: m[4] != null ? +m[4] : null };
+  };
+  const col = (header, ...names) => header.findIndex((h) => names.some((n) => h.trim().toLowerCase().startsWith(n)));
+
+  async function load() {
+    const [eTxt, sTxt] = await Promise.all([
+      fetch(gviz(CONFIG.engagementTab, 'select A,B,C,D,E,F')).then((r) => { if (!r.ok) throw new Error('engagement ' + r.status); return r.text(); }),
+      fetch(gviz(CONFIG.subscriberTab)).then((r) => { if (!r.ok) throw new Error('subscribers ' + r.status); return r.text(); }),
+    ]);
+    if (/^\s*</.test(eTxt) || /^\s*</.test(sTxt)) throw new Error('not shared');
+    const E = parseCSV(eTxt), U = parseCSV(sTxt);
+    const eh = E[0], cDate = col(eh, 'date'), cSent = col(eh, 'total email sent', 'emails sent'), cOpen = col(eh, 'total open', 'open count'), cStart = col(eh, 'quiz start'), cEnd = col(eh, 'quiz end');
+    const map = new Map(); let blanks = [];
+    const today = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+    for (const r of E.slice(1)) {
+      const dt = parseDate(r[cDate]); if (!dt) continue;
+      const vals = [r[cSent], r[cOpen], r[cStart], r[cEnd]].map(num);
+      if (vals.every((v) => v == null)) { if (dt.d <= today) blanks.push(dt.d); continue; }
+      const slot = dt.hour != null && dt.hour >= 12 ? 'PM' : 'AM';
+      const k = dt.d + slot;
+      const o = map.get(k);
+      const [sent, opened, started, completed] = vals.map((v) => v || 0);
+      if (o) { o.sent += sent; o.opened += opened; o.started += started; o.completed += completed; }
+      else map.set(k, { d: dt.d, slot, sent, opened, started, completed });
+    }
+    const sends = [...map.values()].sort((a, b) => a.d - b.d || (a.slot < b.slot ? -1 : 1));
+    const uh = U[0], uDate = col(uh, 'date'), uCount = col(uh, 'no. of subscribers', 'subscribers', 'no of');
+    const sm = new Map();
+    for (const r of U.slice(1)) { const dt = parseDate(r[uDate]); const v = num(r[uCount]); if (dt && v != null) sm.set(dt.d, v); }
+    const subs = [...sm.entries()].sort((a, b) => a[0] - b[0]).map(([d, v]) => ({ d, v }));
+    if (!sends.length || subs.length < 2) throw new Error('empty');
+    return { sends, subs, blanks };
+  }
+
+  /* ---------- Calculations ---------- */
+  function buildPeriods(S, subs) {
+    const startOf = (ms, g) => { const d = new Date(ms); if (g === 'day') return ms; if (g === 'week') return ms - ((d.getUTCDay() + 6) % 7) * DAY; return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1); };
+    const nextOf = (ms, g) => { if (g === 'day') return ms + DAY; if (g === 'week') return ms + 7 * DAY; const d = new Date(ms); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1); };
+    const firstSub = subs[0].d, lastSub = subs[subs.length - 1].d;
+    const subAt = (ms) => {
+      if (ms < firstSub || ms > lastSub) return null;
+      for (let i = 0; i < subs.length; i++) {
+        if (ms === subs[i].d) return subs[i].v;
+        if (ms < subs[i].d) { const a = subs[i - 1], b = subs[i]; if ((b.d - a.d) / DAY > CONFIG.missingLogDays) return null; return a.v + (b.v - a.v) * (ms - a.d) / (b.d - a.d); }
+      }
+      return null;
+    };
+    const firstSend = S[0].d, lastSend = S[S.length - 1].d;
+    const pct = (a, b) => (a == null || b == null || b === 0) ? null : r4((a - b) / b);
+    const pts = (a, b) => (a == null || b == null) ? null : Math.round((a - b) * 10000) / 100;
+    const out = { day: [], week: [], month: [] };
+    for (const g of ['day', 'week', 'month']) {
+      const m = new Map();
+      for (const r of S) {
+        const k = startOf(r.d, g); let o = m.get(k);
+        if (!o) m.set(k, (o = { sent: 0, openedT: 0, opened: 0, started: 0, completed: 0 }));
+        o.sent += r.sent; o.opened += r.opened; o.started += r.started; o.completed += r.completed; if (r.sent > 0) o.openedT += r.opened;
+      }
+      let prev = null;
+      const end = Math.max(lastSend, lastSub);
+      for (let k = startOf(Math.min(firstSend, firstSub), g); k <= end; k = nextOf(k, g)) {
+        const e = nextOf(k, g) - DAY, o = m.get(k), sv = subAt(Math.min(e, lastSub));
+        if (!o && sv == null) { prev = null; continue; }
+        const row = {
+          period: iso(k), period_end: iso(e), complete: e <= lastSend, subs_complete: e <= lastSub,
+          sent: o && o.sent > 0 ? o.sent : null, opened: o ? o.opened : null, started: o ? o.started : null, completed: o ? o.completed : null,
+          open_rate: o && o.sent > 0 ? r4(o.openedT / o.sent) : null,
+          start_rate: o && o.opened > 0 ? r4(o.started / o.opened) : null,
+          completion_rate: o && o.started > 0 ? r4(o.completed / o.started) : null,
+          subscribers: sv == null ? null : Math.round(sv),
+        };
+        row.net_new = prev && prev.subscribers != null && row.subscribers != null ? row.subscribers - prev.subscribers : null;
+        row.sent_chg = prev ? pct(row.sent, prev.sent) : null;
+        row.opened_chg = prev ? pct(row.opened, prev.opened) : null;
+        row.open_rate_chg = prev ? pts(row.open_rate, prev.open_rate) : null;
+        row.start_rate_chg = prev ? pts(row.start_rate, prev.start_rate) : null;
+        row.completion_rate_chg = prev ? pts(row.completion_rate, prev.completion_rate) : null;
+        out[g].push(row); prev = row;
+      }
+    }
+    return out;
+  }
+
+  function buildKpis(P) {
+    const out = {};
+    for (const g of ['day', 'week', 'month']) {
+      const E = P[g].filter((p) => p.complete && p.sent != null), U = P[g].filter((p) => p.subscribers != null && p.net_new != null);
+      const cur = E[E.length - 1], prev = E[E.length - 2], sc = U[U.length - 1], sp = U[U.length - 2];
+      const k = {};
+      if (sc && sp) k.subscribers = { period: sc.period, period_end: sc.period_end, partial: !sc.subs_complete, value: sc.subscribers, prev: sp.net_new, change: sc.net_new };
+      if (cur && prev) {
+        for (const m of ['sent', 'opened']) k[m] = { period: cur.period, period_end: cur.period_end, value: cur[m], prev: prev[m], change: prev[m] ? (cur[m] - prev[m]) / prev[m] : null };
+        for (const m of ['open_rate', 'start_rate', 'completion_rate']) k[m] = { period: cur.period, period_end: cur.period_end, value: cur[m], prev: prev[m], change: cur[m] != null && prev[m] != null ? (cur[m] - prev[m]) * 100 : null };
+      }
+      out[g] = k;
+    }
+    return out;
+  }
+
+  function buildFacts(S, subs, P, blanks) {
+    const last = S[S.length - 1].d;
+    const agg = (rows) => rows.reduce((a, r) => ({ n: a.n + 1, sent: a.sent + r.sent, opened: a.opened + r.opened, started: a.started + r.started, completed: a.completed + r.completed }), { n: 0, sent: 0, opened: 0, started: 0, completed: 0 });
+    const tracked = S.filter((r) => r.sent > 0);
+    const l90 = agg(tracked.filter((r) => r.d > last - 90 * DAY));
+    const p90 = agg(tracked.filter((r) => r.d > last - 455 * DAY && r.d <= last - 365 * DAY));
+    const W = P.week.filter((p) => p.complete && p.sent != null);
+    const sumW = (rows) => rows.reduce((a, p) => ({ sent: a.sent + p.sent, opened: a.opened + p.opened, started: a.started + p.started, completed: a.completed + p.completed }), { sent: 0, opened: 0, started: 0, completed: 0 });
+    const w4 = sumW(W.slice(-4)), w8 = sumW(W.slice(-8, -4));
+    const rates = (a) => ({ open: a.sent ? a.opened / a.sent : null, start: a.opened ? a.started / a.opened : null, comp: a.started ? a.completed / a.started : null });
+    const R4 = rates(w4), R8 = rates(w8);
+    // subscriber log
+    let spikeAdded = 0, spikeCount = 0, orgAdded = 0, orgDays = 0; const gaps = [];
+    for (let i = 1; i < subs.length; i++) {
+      const dv = subs[i].v - subs[i - 1].v, dd = (subs[i].d - subs[i - 1].d) / DAY;
+      if (dd > CONFIG.missingLogDays) { gaps.push([subs[i - 1].d, subs[i].d]); continue; }
+      if (dv >= 100) { spikeAdded += dv; spikeCount++; } else { orgAdded += dv; orgDays += dd; }
+    }
+    const lastSub = subs[subs.length - 1];
+    const base = subs.find((s) => s.d >= lastSub.d - 56 * DAY && s.d < lastSub.d) || subs[subs.length - 2];
+    const recentWeeks = Math.max(1, (lastSub.d - base.d) / DAY / 7);
+    const lastSent = S.filter((r) => r.d === last).reduce((m, r) => Math.max(m, r.sent), 0);
+    const byDay = new Map(); S.forEach((r) => { if (!byDay.has(r.d)) byDay.set(r.d, []); byDay.get(r.d).push(r); });
+    let dup = 0;
+    byDay.forEach((rs, d) => { if (d > last - 30 * DAY && rs.length === 2 && ['sent', 'opened', 'started', 'completed'].every((f) => rs[0][f] === rs[1][f])) dup++; });
+    const today = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+    return {
+      last, lastSubDate: lastSub.d, today,
+      opens_per_send_last90: l90.n ? Math.round(l90.opened / l90.n) : null,
+      opens_per_send_prev: p90.n ? Math.round(p90.opened / p90.n) : null,
+      sent_per_send_last90: l90.n ? Math.round(l90.sent / l90.n) : null,
+      sent_per_send_prev: p90.n ? Math.round(p90.sent / p90.n) : null,
+      starts_per_send_last90: l90.n ? Math.round(l90.started / l90.n) : null,
+      non_openers_per_send: l90.n ? Math.round((l90.sent - l90.opened) / l90.n) : null,
+      start_rate_last90: l90.opened ? l90.started / l90.opened : null,
+      completion_rate_last90: l90.started ? l90.completed / l90.started : null,
+      open_rate_4w: R4.open, open_rate_prev4w: R8.open, start_rate_4w: R4.start, start_rate_prev4w: R8.start, completion_rate_4w: R4.comp,
+      spike_count: spikeCount, spike_added: spikeAdded, spike_share: spikeAdded + orgAdded > 0 ? spikeAdded / (spikeAdded + orgAdded) : null,
+      organic_per_week: orgDays ? orgAdded / orgDays * 7 : null,
+      recent_per_week: (lastSub.v - base.v) / recentWeeks,
+      weekly_target: CONFIG.weeklyNewTarget,
+      subscribers_latest: lastSub.v, not_emailed: lastSub.v - lastSent,
+      dup_days_30: dup, gaps, blanks,
+      months_over_100: P.month.filter((p) => p.completion_rate > 1).length,
+    };
+  }
+
+  function bySlot(S) {
+    const last = S[S.length - 1].d;
+    return ['AM', 'PM'].map((slot) => {
+      const g = S.filter((r) => r.slot === slot && r.d > last - 365 * DAY && r.sent > 0);
+      const s = g.reduce((a, r) => ({ sent: a.sent + r.sent, opened: a.opened + r.opened, started: a.started + r.started, completed: a.completed + r.completed }), { sent: 0, opened: 0, started: 0, completed: 0 });
+      return { slot, sends: g.length, ...s, open_rate: s.sent ? s.opened / s.sent : null, start_rate: s.opened ? s.started / s.opened : null, completion_rate: s.started ? s.completed / s.started : null };
+    });
+  }
+
+  function spikesOf(subs) {
+    const out = [];
+    for (let i = 1; i < subs.length; i++) {
+      const dd = (subs[i].d - subs[i - 1].d) / DAY, dv = subs[i].v - subs[i - 1].v;
+      if (dd <= CONFIG.missingLogDays && dv >= 100) out.push({ d: subs[i].d, added: dv });
+    }
+    return out;
+  }
+
+  /* ---------- Rendering ---------- */
+  const periodLabel = (g, s, e, partial) => {
+    const d = parseIso(s);
+    if (g === 'day') return d3.utcFormat('%a, %b %-d, %Y')(d);
+    if (g === 'week') return 'Week of ' + fDate(d) + (partial ? ' (to ' + d3.utcFormat('%b %-d')(parseIso(e)) + ')' : '');
+    return d3.utcFormat('%B %Y')(d) + (partial ? ' (to ' + d3.utcFormat('%b %-d')(parseIso(e)) + ')' : '');
+  };
+  const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  const METRICS = [
+    { id: 'subscribers', src: 'subs', name: { value: 'Subscribers', change: 'Net new' },
+      value: { field: 'subscribers', type: 'line', area: true, fmt: fInt, axis: fCompact },
+      change: { field: 'net_new', type: 'bar', fmt: fSignedInt, axis: (v) => sign(v, fInt(Math.abs(v))), clip: true },
+      note: { value: 'Total subscribers at the end of each period.', change: 'Net new subscribers each period.' } },
+    { id: 'sent', src: 'sends', value: { field: 'sent', type: 'count', fmt: fInt, axis: fCompact },
+      change: { field: 'sent_chg', type: 'bar', fmt: fSignedPct, axis: (v) => sign(v, d3.format('.0%')(Math.abs(v))), clip: true },
+      note: { value: 'Quiz emails sent, 7 AM and 7 PM sends combined.', change: 'Percent change in emails sent vs the period before.' } },
+    { id: 'opened', src: 'sends', value: { field: 'opened', type: 'count', fmt: fInt, axis: fCompact },
+      change: { field: 'opened_chg', type: 'bar', fmt: fSignedPct, axis: (v) => sign(v, d3.format('.0%')(Math.abs(v))), clip: true },
+      note: { value: 'Emails opened, both sends combined.', change: 'Percent change in emails opened vs the period before.' } },
+    { id: 'open_rate', src: 'sends', value: { field: 'open_rate', type: 'line', fmt: fPct, axis: d3.format('.0%'), floor0: true },
+      change: { field: 'open_rate_chg', type: 'bar', fmt: fPts, axis: (v) => sign(v, d3.format('~g')(Math.abs(v))) + ' pts', clip: true },
+      note: { value: 'Emails opened ÷ emails sent.', change: 'Change in open rate vs the period before, in percentage points.' } },
+    { id: 'start_rate', src: 'sends', value: { field: 'start_rate', type: 'line', fmt: fPct, axis: d3.format('.0%'), floor0: true },
+      change: { field: 'start_rate_chg', type: 'bar', fmt: fPts, axis: (v) => sign(v, d3.format('~g')(Math.abs(v))) + ' pts', clip: true },
+      note: { value: 'Quiz starts ÷ emails opened.', change: 'Change in quiz start rate vs the period before, in percentage points.' } },
+    { id: 'completion_rate', src: 'sends', value: { field: 'completion_rate', type: 'line', fmt: fPct, axis: d3.format('.0%'), floor0: true },
+      change: { field: 'completion_rate_chg', type: 'bar', fmt: fPts, axis: (v) => sign(v, d3.format('~g')(Math.abs(v))) + ' pts', clip: true },
+      note: { value: 'Quiz completions ÷ quiz starts.', change: 'Change in completion rate vs the period before, in percentage points.' } },
+  ];
+
+  function drawChart(box, rows, cfg, extra) {
+    box.replaceChildren();
+    const W = Math.max(260, box.clientWidth || 300), H = box.classList.contains('tall') ? 240 : 200;
+    const vals = rows.map((r) => r.v).filter((v) => v != null && isFinite(v));
+    if (!vals.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = 'No data in this range'; box.append(d); return; }
+    const isBar = cfg.type === 'bar' || (cfg.type === 'count' && rows.length <= 180);
+    let lo = d3.min(vals), hi = d3.max(vals);
+    if (cfg.clip && vals.length > 20) { const s = vals.slice().sort(d3.ascending); lo = d3.quantile(s, 0.02); hi = d3.quantile(s, 0.98); }
+    if (isBar) { lo = Math.min(0, lo); hi = Math.max(0, hi); }
+    else { const pad = (hi - lo) * 0.12 || Math.abs(hi) * 0.1 || 1; lo -= pad; hi += pad; if (lo < 0) lo = 0; }
+    if (lo === hi) hi = lo + 1;
+    const mt = 10, mb = 26;
+    const y = d3.scaleLinear([lo, hi], [H - mb, mt]).nice(4).clamp(true);
+    const ticks = y.ticks(4);
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('height', H).attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img');
+    const meas = svg.append('text').attr('class', 'tick'); let mw = 0;
+    ticks.forEach((t) => { meas.text(cfg.axis(t)); mw = Math.max(mw, meas.node().getComputedTextLength()); }); meas.remove();
+    const ml = Math.ceil(mw) + 12, mr = 10;
+    const x = d3.scaleUtc([rows[0].x0, rows[rows.length - 1].x1], [ml, W - mr]);
+    const mid = (r) => new Date((+r.x0 + +r.x1) / 2);
+    const cGrid = cssVar('--grid'), cAxis = cssVar('--axis'), c0 = cssVar('--accent'), c1 = cssVar('--accent-2'), cBad = cssVar('--bad'), cPanel = cssVar('--panel');
+    svg.append('g').selectAll('line').data(ticks).join('line').attr('x1', ml).attr('x2', W - mr).attr('y1', (d) => y(d)).attr('y2', (d) => y(d)).attr('stroke', (d) => (d === 0 && lo < 0 ? cAxis : cGrid));
+    svg.append('g').selectAll('text').data(ticks).join('text').attr('class', 'tick').attr('x', ml - 8).attr('y', (d) => y(d)).attr('dy', '0.32em').attr('text-anchor', 'end').text(cfg.axis);
+    const gx = svg.append('g').attr('transform', `translate(0,${H - mb})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor((W - ml) / 95))).tickSizeOuter(0).tickSize(4));
+    gx.attr('font-size', null).attr('font-family', null);
+    gx.select('.domain').attr('stroke', cAxis); gx.selectAll('.tick line').attr('stroke', cAxis); gx.selectAll('.tick text').attr('class', 'tick');
+    gx.selectAll('.tick text').nodes().forEach((n) => {
+      const bb = n.getBBox(); const tx = +(/translate\(([-\d.]+)/.exec(n.parentNode.getAttribute('transform') || '') || [0, 0])[1];
+      if (tx + bb.width / 2 > W) n.setAttribute('text-anchor', 'end'); if (tx - bb.width / 2 < 0) n.setAttribute('text-anchor', 'start');
+    });
+    const plot = svg.append('g');
+    if (isBar) {
+      const y0 = y(Math.max(lo, Math.min(0, hi)));
+      const gapOf = (r) => { const w = x(r.x1) - x(r.x0); return rows.length <= 90 ? Math.min(6, w * 0.25) : 0; };
+      plot.selectAll('rect').data(rows.filter((r) => r.v != null)).join('rect')
+        .attr('x', (r) => x(r.x0) + gapOf(r) / 2).attr('width', (r) => Math.max(1, x(r.x1) - x(r.x0) - gapOf(r)))
+        .attr('y', (r) => Math.min(y(r.v), y0)).attr('height', (r) => Math.max(1, Math.abs(y(r.v) - y0)))
+        .attr('rx', (r) => (x(r.x1) - x(r.x0) > 8 ? 3 : 0))
+        .attr('fill', (r) => (r.hi ? c1 : r.v < 0 && cfg.diverge ? cBad : c0)).attr('opacity', (r) => (r.partial ? 0.4 : 1));
+    } else {
+      const gid = 'g' + Math.random().toString(36).slice(2, 8);
+      if (cfg.area || cfg.type === 'count') {
+        const grad = svg.append('defs').append('linearGradient').attr('id', gid).attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', 1);
+        [[0, .26], [.25, .16], [.5, .08], [.75, .03], [1, 0]].forEach(([o, a]) => grad.append('stop').attr('offset', o).attr('style', `stop-color:${c0};stop-opacity:${a}`));
+        plot.append('path').datum(rows).attr('fill', `url(#${gid})`).attr('d', d3.area().defined((r) => r.v != null).x((r) => x(mid(r))).y0(H - mb).y1((r) => y(r.v)));
+      }
+      plot.append('path').datum(rows).attr('fill', 'none').attr('stroke', c0).attr('stroke-width', 2).attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round')
+        .attr('d', d3.line().defined((r) => r.v != null).x((r) => x(mid(r))).y((r) => y(r.v)));
+      const lp = rows.filter((r) => r.v != null).pop();
+      if (lp) plot.append('circle').attr('cx', x(mid(lp))).attr('cy', y(lp.v)).attr('r', 3.5).attr('fill', c0);
+      (extra.markers || []).forEach((m) => {
+        const r = rows.find((q) => m.d >= +q.x0 && m.d < +q.x1); if (!r || r.v == null) return;
+        plot.append('circle').attr('cx', x(mid(r))).attr('cy', y(r.v)).attr('r', 4.5).attr('fill', c1).attr('stroke', cPanel).attr('stroke-width', 1.5);
+      });
+    }
+    const tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; box.append(tip);
+    const hover = svg.append('g').style('pointer-events', 'none');
+    const rule = hover.append('line').attr('y1', mt).attr('y2', H - mb).attr('stroke', cAxis).attr('opacity', 0);
+    const dot = hover.append('circle').attr('r', 4).attr('fill', c0).attr('opacity', 0);
+    const mids = rows.map((r) => +mid(r));
+    svg.append('rect').attr('x', ml).attr('y', mt).attr('width', W - ml - mr).attr('height', H - mt - mb).attr('fill', 'transparent')
+      .on('pointermove', (ev) => {
+        const [px] = d3.pointer(ev); const tx = +x.invert(px);
+        let i = d3.bisectLeft(mids, tx); if (i > 0 && (i >= mids.length || tx - mids[i - 1] < mids[i] - tx)) i -= 1;
+        const r = rows[i]; if (!r) return;
+        const cx = x(mid(r));
+        rule.attr('x1', cx).attr('x2', cx).attr('opacity', 1);
+        if (r.v != null) dot.attr('cx', cx).attr('cy', y(r.v)).attr('opacity', 1); else dot.attr('opacity', 0);
+        tip.replaceChildren();
+        const a = document.createElement('div'); a.className = 'd'; a.textContent = r.label + (r.partial ? ' · partial' : ''); tip.append(a);
+        const b = document.createElement('div'); b.textContent = r.v == null ? 'No data' : (cfg.name ? cfg.name + ': ' : '') + cfg.fmt(r.v); tip.append(b);
+        if (r.note) { const c = document.createElement('div'); c.className = 'd'; c.textContent = r.note; tip.append(c); }
+        tip.hidden = false;
+        const scale = box.clientWidth / W, tw = tip.offsetWidth;
+        let left = cx * scale + 12; if (left + tw > box.clientWidth) left = cx * scale - tw - 12; if (left < 0) left = 0;
+        tip.style.left = left + 'px'; tip.style.top = '4px';
+      })
+      .on('pointerleave', () => { tip.hidden = true; rule.attr('opacity', 0); dot.attr('opacity', 0); });
+  }
+
+  function fillFacts(F) {
+    const fmt = (k, v) => {
+      if (v == null || !isFinite(v)) return '—';
+      if (/_rate|_share/.test(k)) return fPct(v);
+      if (/per_week/.test(k)) return d3.format(',.1f')(v);
+      return fInt(Math.round(v));
+    };
+    $$('[data-f]').forEach((el) => { el.textContent = fmt(el.dataset.f, F[el.dataset.f]); });
+  }
+
+  function li(list, s, title, html) {
+    const item = document.createElement('li'); item.className = 'signal';
+    const pill = document.createElement('span'); pill.className = 'pill'; pill.dataset.s = s; pill.textContent = s === 'good' ? 'On track' : s === 'watch' ? 'Watch' : 'Act';
+    const body = document.createElement('div');
+    const h = document.createElement('h3'); h.textContent = title;
+    const p = document.createElement('p'); p.innerHTML = html; // html built only from numbers this page formats, never from sheet text
+    body.append(h, p); item.append(pill, body); list.append(item);
+  }
+
+  function renderInsights(F) {
+    const b = (v) => `<b>${v}</b>`;
+    const sig = $('#signals'); sig.replaceChildren();
+    const rpw = F.recent_per_week, tgt = F.weekly_target;
+    li(sig, rpw >= tgt ? 'good' : rpw >= tgt / 2 ? 'watch' : 'bad', 'Subscriber growth pace',
+      `Gaining ${b(d3.format(',.1f')(rpw))} subscribers a week over the last 8 weeks of logs, against a target of ${b(fInt(tgt))}. ${rpw < tgt ? 'Growth needs a new source: see Action 1.' : 'Keep the referral and event calendar running.'}`);
+    if (F.opens_per_send_prev != null) {
+      const ch = (F.opens_per_send_last90 - F.opens_per_send_prev) / F.opens_per_send_prev;
+      li(sig, ch >= 0.05 ? 'good' : ch <= -0.05 ? 'bad' : 'watch', 'Readership vs list size',
+        `Opens per send: ${b(fInt(F.opens_per_send_last90))} in the last 90 days vs ${b(fInt(F.opens_per_send_prev))} a year earlier (${b(fSignedPct(ch))}), while emails per send went from ${b(fInt(F.sent_per_send_prev))} to ${b(fInt(F.sent_per_send_last90))}. ${ch < 0.05 ? 'The list is growing faster than the readership: see Actions 2 and 3.' : 'New subscribers are reading.'}`);
+    }
+    if (F.open_rate_4w != null && F.open_rate_prev4w != null) {
+      const d = (F.open_rate_4w - F.open_rate_prev4w) * 100;
+      li(sig, d <= -0.3 ? 'bad' : F.open_rate_4w < 0.1 ? 'watch' : d >= 0.3 ? 'good' : 'watch', 'Open rate, last 4 weeks',
+        `${b(fPct(F.open_rate_4w))}, ${b(fPts(d))} vs the 4 weeks before. ${F.open_rate_4w < 0.1 ? 'Below 10% inbox placement is at risk: see Action 3.' : ''}`);
+    }
+    if (F.start_rate_4w != null && F.start_rate_prev4w != null) {
+      const d = (F.start_rate_4w - F.start_rate_prev4w) * 100;
+      li(sig, d >= 2 ? 'good' : d <= -2 ? 'bad' : 'watch', 'Quiz start rate, last 4 weeks',
+        `${b(fPct(F.start_rate_4w))} of opens started the quiz, ${b(fPts(d))} vs the 4 weeks before.`);
+    }
+    if (F.completion_rate_4w != null) {
+      li(sig, F.completion_rate_4w >= 0.97 ? 'good' : F.completion_rate_4w >= 0.9 ? 'watch' : 'bad', 'Quiz completion, last 4 weeks',
+        `${b(fPct(F.completion_rate_4w))} of starts finished. ${F.completion_rate_4w >= 0.97 ? 'The quiz itself works; the finish screen is the place to ask for referrals.' : 'A drop here usually means a bug or a quiz that is too long. Check recent quizzes.'}`);
+    }
+    if (F.spike_share != null) {
+      li(sig, F.spike_share > 0.5 ? 'watch' : 'good', 'Dependence on bursts',
+        `${b(fInt(F.spike_count))} jumps of 100+ between logs brought ${b(fPct(F.spike_share))} of logged growth. Steady growth between bursts averages ${b(d3.format(',.1f')(F.organic_per_week))} a week.`);
+    }
+    // data checks
+    const ck = $('#checks'); ck.replaceChildren();
+    const daysSince = (d) => Math.round((F.today - d) / DAY);
+    const blankDays = new Set(F.blanks.map((d) => d)).size;
+    li(ck, F.blanks.length ? 'bad' : 'good', 'Unfilled send rows',
+      F.blanks.length ? `${b(fInt(F.blanks.length))} send rows dated today or earlier (${b(fInt(blankDays))} days, latest ${b(fDate(new Date(d3.max(F.blanks))))}) have no numbers yet. The last filled send is ${b(fDate(new Date(F.last)))}.` : `Every send up to ${b(fDate(new Date(F.last)))} has numbers.`);
+    li(ck, daysSince(F.lastSubDate) > 10 ? 'watch' : 'good', 'Subscriber log freshness',
+      `Last subscriber count logged on ${b(fDate(new Date(F.lastSubDate)))}, ${b(fInt(daysSince(F.lastSubDate)))} days ago.`);
+    li(ck, F.gaps.length ? 'bad' : 'good', 'Missing subscriber logs',
+      F.gaps.length ? `The log skips ${F.gaps.map(([a, c]) => b(fDate(new Date(a)) + ' to ' + fDate(new Date(c)))).join(', ')}. Growth in that span isn't counted in the signals. Add those rows to the Subscriber Count tab.` : 'No long gaps in the subscriber log.');
+    li(ck, F.dup_days_30 > 3 ? 'watch' : 'good', 'Copied morning/evening rows',
+      `${b(fInt(F.dup_days_30))} of the last 30 days have identical 7 AM and 7 PM numbers, which suggests one send was copied into both rows.`);
+    li(ck, F.months_over_100 ? 'watch' : 'good', 'Completion above 100%',
+      F.months_over_100 ? `${b(fInt(F.months_over_100))} month(s) show more completions than starts, a tracking quirk.` : 'No month has more completions than starts.');
+    $('#ins-asof').textContent = 'Data to ' + fDate(new Date(F.last));
+    fillFacts(F);
+  }
+
+  function render() {
+    const D = state.data; const g = state.grain, mode = state.mode, range = state.range;
+    $$('[data-grain]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.grain === g)));
+    $$('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    $('#range').value = range;
+    if (!D) return;
+    const word = g;
+    const F = D.facts;
+    // takeaway
+    const tk = $('#takeaway');
+    if (F.opens_per_send_prev != null) {
+      tk.innerHTML = `Each send now reaches <b>${fInt(F.sent_per_send_last90)}</b> inboxes (a year ago: <b>${fInt(F.sent_per_send_prev)}</b>) and gets <b>${fInt(F.opens_per_send_last90)}</b> opens (a year ago: <b>${fInt(F.opens_per_send_prev)}</b>). The list is growing at <b>${d3.format(',.1f')(F.recent_per_week)}</b> a week; the target is <b>${fInt(F.weekly_target)}</b>.`;
+    }
+    // KPIs
+    const K = D.kpis[g];
+    $$('[data-k]').forEach((el) => {
+      el.classList.remove('skeleton');
+      const [m, f] = el.dataset.k.split('.'); const row = K[m];
+      if (!row || row[f] == null) { el.textContent = '—'; el.removeAttribute('data-trend'); return; }
+      const v = row[f];
+      el.textContent = m === 'subscribers' ? (f === 'value' ? fInt(v) : fSignedInt(v)) : (m === 'sent' || m === 'opened') ? (f === 'change' ? fSignedPct(v) : fInt(v)) : (f === 'change' ? fPts(v) : fPct(v));
+      if (f === 'change') el.dataset.trend = v > 0 ? 'up' : v < 0 ? 'down' : 'flat';
+    });
+    $$('[data-vs]').forEach((el) => { el.textContent = 'vs prior ' + word; });
+    $$('[data-p]').forEach((el) => { const row = K[el.dataset.p]; el.textContent = row ? periodLabel(g, row.period, row.partial ? iso(F.lastSubDate) : row.period_end, row.partial) + (row.partial ? ', so far' : '') : ''; });
+    // funnel
+    const all = D.periods[g];
+    const fRow = K.sent ? all.find((r) => r.period === K.sent.period) : null;
+    $('#funnel-note').textContent = fRow ? periodLabel(g, fRow.period, fRow.period_end, false) + '. Each step as a share of the step before it.' : '';
+    $$('[data-fn]').forEach((el) => { const f = el.dataset.fn; const v = fRow ? fRow[f] : null; el.textContent = v == null ? '—' : /rate/.test(f) ? fPct(v) : fInt(v); });
+    $$('[data-step]').forEach((bar) => { const f = bar.dataset.step; bar.style.width = (fRow && fRow.sent ? Math.max(0.5, fRow[f] / fRow.sent * 100) : 0) + '%'; });
+    // charts
+    const lastEnd = d3.max(all, (r) => r.period_end);
+    const cutoff = range === 'all' ? null : +parseIso(lastEnd) - (range === '3m' ? 92 : 366) * DAY;
+    const R = all.filter((r) => cutoff == null || +parseIso(r.period_end) > cutoff);
+    $('#trends-title').textContent = mode === 'value' ? 'Trends by ' + word : (g === 'day' ? 'Day-to-day change' : g === 'week' ? 'Week-over-week change' : 'Month-over-month change');
+    METRICS.forEach((M) => {
+      const box = $(`[data-chart="${M.id}"]`);
+      const cfg = Object.assign({}, M[mode], { diverge: mode === 'change', name: M.name ? M.name[mode] : '' });
+      $(`[data-note="${M.id}"]`).textContent = M.note[mode];
+      const rows = R.map((r) => {
+        const x0 = parseIso(r.period), x1 = new Date(+parseIso(r.period_end) + DAY);
+        const out = { x0, x1, v: r[cfg.field], partial: M.src === 'subs' ? !r.subs_complete : !r.complete, label: periodLabel(g, r.period, r.period_end, false) };
+        if (M.id === 'subscribers') {
+          const sp = D.spikes.filter((s) => s.d >= +x0 && s.d < +x1);
+          if (sp.length) { out.note = 'Jump of ' + sp.map((s) => '+' + fInt(s.added) + ' (' + d3.utcFormat('%b %-d')(new Date(s.d)) + ')').join(', '); if (mode === 'change') out.hi = true; }
+          if (g === 'day' && out.v != null) out.note = (out.note ? out.note + ' · ' : '') + 'estimated between logs';
+        }
+        return out;
+      });
+      while (rows.length && rows[0].v == null) rows.shift();
+      drawChart(box, rows, cfg, { markers: M.id === 'subscribers' && mode === 'value' ? D.spikes : [] });
+    });
+    const lg = $('#legend-subs'); lg.replaceChildren();
+    const item = document.createElement('span'); const dt = document.createElement('span'); dt.className = 'dot'; dt.style.background = cssVar('--accent-2');
+    item.append(dt, document.createTextNode(mode === 'value' ? 'Log with a jump of 100+ subscribers' : 'Period with a jump of 100+ subscribers')); lg.append(item);
+    if (F.gaps.length) { const n = document.createElement('span'); n.textContent = 'Breaks in the line are spans with no subscriber logs.'; lg.append(n); }
+    // slot table
+    const tb = $('#slot-table tbody'); tb.replaceChildren();
+    D.slots.forEach((r) => {
+      const tr = document.createElement('tr');
+      [r.slot === 'AM' ? 'Morning, 7 AM' : 'Evening, 7 PM', fInt(r.sends), fInt(r.sent), fInt(r.opened), r.open_rate == null ? '—' : fPct(r.open_rate), r.start_rate == null ? '—' : fPct(r.start_rate), r.completion_rate == null ? '—' : fPct(r.completion_rate)]
+        .forEach((v) => { const td = document.createElement('td'); td.textContent = v; tr.append(td); });
+      tb.append(tr);
+    });
+  }
+
+  /* ---------- Wiring ---------- */
+  async function refresh() {
+    const live = $('#live'); live.dataset.state = 'loading'; live.textContent = 'Updating from Google Sheet…';
+    try {
+      const { sends, subs, blanks } = await load();
+      const periods = buildPeriods(sends, subs);
+      state.data = { periods, kpis: buildKpis(periods), facts: buildFacts(sends, subs, periods, blanks), slots: bySlot(sends), spikes: spikesOf(subs) };
+      $('#banner').hidden = true;
+      live.dataset.state = 'ok';
+      live.textContent = 'Live from Google Sheet · updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      renderInsights(state.data.facts);
+      render();
+    } catch (e) {
+      live.dataset.state = 'error'; live.textContent = 'Could not update';
+      const bn = $('#banner'); bn.hidden = false;
+      bn.textContent = (state.data ? 'Showing the last data loaded. ' : '') + "Couldn't read the Google Sheet. Check that it is shared as \"Anyone with the link can view\" and that the tabs are still named \"" + CONFIG.engagementTab + '" and "' + CONFIG.subscriberTab + '".';
+      if (state.data) render();
+    }
+  }
+
+  $$('[data-grain]').forEach((b) => b.addEventListener('click', () => { state.grain = b.dataset.grain; saveView(); render(); }));
+  $$('[data-mode]').forEach((b) => b.addEventListener('click', () => { state.mode = b.dataset.mode; saveView(); render(); }));
+  $('#range').addEventListener('change', (e) => { state.range = e.target.value; saveView(); render(); });
+  $('#refresh').addEventListener('click', refresh);
+  const tabs = $$('[role="tab"]');
+  tabs.forEach((t) => t.addEventListener('click', () => {
+    tabs.forEach((x) => { const on = x === t; x.setAttribute('aria-selected', String(on)); document.getElementById(x.getAttribute('aria-controls')).hidden = !on; });
+  }));
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 150); });
+  setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, CONFIG.refreshMinutes * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.data) refresh(); });
+  render();
+  refresh();
+})();
+</script>
+</body>
+</html>
